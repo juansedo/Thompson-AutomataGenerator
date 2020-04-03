@@ -16,119 +16,329 @@ import java.util.Scanner;
 public class ThompsonAutomata {
     
     public static void main(String[] args) {
-        Scanner in = new Scanner(System.in);
-        System.out.println("Ingrese la expresión regular: ");
-        String input = in.nextLine();
-        Node Tree = generateTree(input);
-        Tree = treePruning(Tree);
+        //Scanner in = new Scanner(System.in);
+        //System.out.println("Ingrese la expresión regular: ");
+        //String input = in.nextLine();
+        //Node Tree = generateTree("((a|b)|(c|d))|a*");
+        Node Tree = generateTree("(a*|b)|(c|d)");
+        //System.out.println("Árbol listo");
         
-        System.out.println("Árbol listo");
+        int tree_length = Node.getTreeLength(Tree);
+        Tree.setArcs();
+        Tree.setRest();
         
+        TreeGraph t = getTreeGraph(Tree);
+        
+        for (String s : t.lines) {
+            System.out.println(s);
+        }
     }
     
     public static Node generateTree(String expr) {
-        Node result = new Node(".");
-        for (int i = 0; i < expr.length(); i++) {
-            char c = expr.charAt(i);
-            Node n;
-            switch (c) {
-                case '*':
-                    n = new Node("*");
-                    n.addChild(result.child.removeLast());
-                    result.addChild(n);
-                    break;
-                case '+':
-                    n = new Node("+");
-                    n.addChild(result.child.removeLast());
-                    result.addChild(n);
-                    break;
-                case '|':
-                    n = new Node(".");
-                    for (Node child : result.child) {
-                        n.addChild(child);
+        /**
+         * Implementing:
+         * E -> R '|' E | R
+         * R -> SR | S
+         * S -> T* | T+ | T
+         * T -> (a..z) | 'e' | (E)
+         */
+        return E(expr);
+    }
+    
+    public static Node E(String expr) {
+        Node actual;
+        int pos_pipe = search(expr,'|');
+        if (pos_pipe >= 0) {
+            actual = new Node("|");
+            actual.left = R(expr.substring(0, pos_pipe));
+            actual.right = E(expr.substring(pos_pipe+1));
+            return actual;
+        }
+        return R(expr);
+    }
+    
+    public static Node R(String expr) {
+        Node actual;
+        int increment;
+        char c, d;
+        if (!expr.isEmpty()) c = expr.charAt(0);
+        else return S(expr);
+        
+        if (c == '(') {
+            int pos_bracket = closedBracket(expr, 0);
+            if(pos_bracket < expr.length() - 2) {
+                actual = new Node(".");
+                d = expr.charAt(pos_bracket+1);
+                if(d == '*' || d == '+') pos_bracket++;
+                actual.left = S(expr.substring(0, ++pos_bracket));
+                actual.right = R(expr.substring(pos_bracket));
+            }
+            else return S(expr);
+        }
+        else {
+            if(expr.length() > 1) {
+                d = expr.charAt(1);
+                if (expr.length() > 2) {
+                    actual = new Node(".");
+                    
+                    increment = (d != '*' && d != '+')? 1: 2;
+                    
+                    actual.left = S(expr.substring(0, increment));
+                    actual.right = R(expr.substring(increment));
+                }
+                else {
+                    actual = new Node(d);
+                    if (d != '*' && d != '+') {
+                        actual = new Node(".");
+                        actual.right = S(d + "");
                     }
-                    result.child.clear();
-                    Node m = new Node("|");
-                    m.addChild(n);
-                    m.addChild(generateTree(expr.substring(i+1)));
-                    result.addChild(m);
-                    i = expr.length();
-                    break;
-                case '(':
-                    String expr_parentheses = parentheses(expr, i);
-                    n = generateTree(expr_parentheses);
-                    result.addChild(n);
-                    i += expr_parentheses.length() + 1;
-                    break;
-                case ' ':
-                    break;
-                default:
-                    result.addChild(c + "");
-                    break;
+                    actual.left = S(c + "");
+                }
             }
+            else return S(expr);
         }
-        
-        return result;
+        return actual;
     }
     
-    public static Node treePruning(Node root) {
-        if (root.child.size() == 1) {
-            Node child = root.child.get(0);
-            String parent_text = root.text;
-            String child_text = child.text;
-            
-            if (parent_text.equals(child_text) || parent_text.equals(".")) {
-                root.text = child.text;
-                root.child = child.child;
-            }
-        }
+    public static Node S(String expr) {
+        Node actual;
+        char c;
+        if (!expr.isEmpty()) c = expr.charAt(expr.length() - 1);
+        else return T(expr);
         
-        if (root.child.isEmpty()) {
-            return root;
+        switch(c) {
+            case '*': case '+':
+                actual = new Node(c);
+                actual.left = T(expr.substring(0, expr.length() - 1));
+                break;
+            default:
+                actual = T(expr);
+                break;
         }
-        
-        Node new_root = new Node(root.text);
-        for (int i = 0; i < root.child.size(); i++) {
-            new_root.addChild(treePruning(root.child.get(i)));
-        }
-        
-        return new_root;
+        return actual;
     }
     
-    public static String parentheses(String str, int i) {
+    public static Node T(String expr) {
+        Node actual;
+        char c;
+        if (!expr.isEmpty()) c = expr.charAt(0);
+        else return null;
+        
+        if (c == '(') {
+            int pos_bracket = closedBracket(expr, 0);
+            if (expr.length() > 2) return E(expr.substring(1, pos_bracket));
+            else return null;
+        }
+        return new Node(expr);
+    }
+    
+    public static int search(String s, char c) {
+        int count = 0;
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) == '(') count++;
+            else if (s.charAt(i) == ')') count--;
+            else if (s.charAt(i) == c && count == 0) return i;
+        }
+        return -1;
+    }
+    
+    public static int closedBracket(String s, int opening) {
         int count = 1;
-        int j = i+1;
-        for ( ; j < str.length() && count > 0; j++) {
-            char c = str.charAt(j);
-            switch(c) {
-                case '(': count++; break;
-                case ')': count--; break;
-            }
+        for (int i = opening+1; i < s.length(); i++) {
+            if (s.charAt(i) == '(') count++;
+            else if (s.charAt(i) == ')') count--;
+            
+            if (count == 0) return i;
         }
-        return str.substring(i+1, j-1);
+        return -1;
+    }
+    
+    public static ArrayList<String> printArc(int rest, int length, boolean left, boolean right) {
+        ArrayList<String> t = new ArrayList<>();
+        for (int i = length; i > 0; i--) {
+            String s = "";
+            for (int j = 0; j < rest; j++)  s += " ";
+            for (int j = 0; j < i - 1; j++) s += " ";
+            s += left? "/ ": "  ";
+            for (int j = i; j < length; j++) s += " ";
+            for (int j = i; j < length; j++) s += " ";
+            s += right? "\\": " ";
+            for (int j = 0; j < i - 1; j++) s += " ";
+            for (int j = 0; j < rest; j++) s += " ";
+            t.add(s);
+        }
+        return t;
+    }
+    
+    public static TreeGraph getTreeGraph(Node root) {
+        TreeGraph t = new TreeGraph();
+        TreeGraph children = new TreeGraph();
+        int rest = root.rest;
+        int arc = root.arc_length;
+        int leading = 0;
+        
+        int arcs_left = root.total_LeftArcSons(); 
+        int arcs_right = root.total_RightArcSons();
+        t.lines.add(
+                whiteSpaces(arcs_left) +
+                root.me +
+                whiteSpaces(arc+1)
+        );
+        TreeGraph t_left = new TreeGraph(), t_right = new TreeGraph();
+        if (root.left != null && root.right != null) {
+            leading = (arc != root.left.arc_length)? 3: 0;
+            t_left = getTreeGraph(root.left);
+            t_right = getTreeGraph(root.right);
+            children = TreeGraph.concat(t_left, t_right, leading);
+        }
+        else if (root.left != null) {
+            leading = (arc != root.left.arc_length)? 3: 0;
+            t_left = getTreeGraph(root.left);
+            t_right.lines.add(whiteSpaces(arc+1));
+            children = TreeGraph.concat(t_left, t_right, leading);
+        }
+        else if (root.right != null) {
+            if (arc != root.left.arc_length) {
+                leading = 3;
+                t_left.lines.add(whiteSpaces(rest)+whiteSpaces(arc-1));
+            } else {
+                leading = 0;
+                t_left.lines.add(whiteSpaces(rest)+whiteSpaces(arc));
+            }
+            t_right = getTreeGraph(root.right);
+            children = TreeGraph.concat(t_left, t_right, leading);
+        }
+        t.lines.addAll(printArc(rest, arc, root.left != null, root.right != null));
+        t.lines.addAll(children.lines);
+        return t;
+    }
+    
+    public static String whiteSpaces(int n) {
+        String s = "";
+        for (int i = 0; i < n; i++) s += " ";
+        return s;
     }
 }
 
 class Node {
-    LinkedList<Node> child = new LinkedList<>();
-    String text;
-    Node(String text, Node child) {
-        this.child.add(child);
-        this.text = text;
+    Node left, right;
+    String me;
+    int arc_length;
+    int rest;
+    
+    Node(String me) {
+        this.me = me;
     }
-    Node(String text) {
-        this.text = text;
+    Node(char c) {
+        this.me = String.valueOf(c);
+    }
+    void setLeft(Node n) {
+        this.left = n;
     }
     
-    void addChild(String expr) {
-        this.child.add(new Node(expr));
+    int setRest() {
+        rest = (left != null)? 1 + left.setRest() + left.arc_length: 0;
+        if (right != null) right.setRest();
+        return rest;
     }
     
-    void addChild(Node n) {
-        this.child.add(n);
+    public void setArcs() {
+        int a, b;
+        if (left != null && right != null) {
+            left.setArcs();
+            a = left.arc_length;
+            right.setArcs();
+            b = right.arc_length;
+            
+            int new_arc = Math.max(a, b);
+            left.arc_length = new_arc;
+            right.arc_length = new_arc;
+            
+            if (left.right != null && right.left != null) {     //Colisionan?
+                int left_col = right.total_LeftArcSons();
+                int right_col = left.total_RightArcSons();
+                arc_length = Math.max(left_col, right_col) + 1;
+            } else {
+                arc_length = (new_arc != 0) ?  new_arc: 1;
+            }
+        }
+        else if (left != null) {
+            left.setArcs();
+            a = left.arc_length;
+            arc_length = (a != 0)? a: 1;
+        }
+        else if (right != null) {
+            right.setArcs();
+            b = right.arc_length;
+            arc_length = (b != 0)? b: 1;
+        } 
+        else arc_length = 0;
     }
     
-    Node getLastChild() {
-        return this.child.getLast();
+    public static int getTreeLength(Node n) {
+        int a = Integer.MIN_VALUE, b = Integer.MIN_VALUE;
+        if(n.left == null && n.right == null) return 0;
+        if(n.left != null) {
+            a = 1 + getTreeLength(n.left);
+        }
+        if(n.right != null) {
+            b = 1 + getTreeLength(n.right);
+        }
+        return Math.max(a, b);
+    }
+    
+    int total_LeftArcSons() {
+        if(left != null) return 1 + arc_length + left.total_LeftArcSons();
+        else return 0;
+    }
+    
+    int total_RightArcSons() {
+        if(right != null) return 1 + arc_length + right.total_RightArcSons();
+        else return 0;
+    }
+}
+
+class TreeGraph {
+    ArrayList<String> lines = new ArrayList<>();
+    
+    public static TreeGraph concat(TreeGraph t1, TreeGraph t2, int leading) {
+        TreeGraph t = new TreeGraph();
+        int t1_size = t1.lines.size();
+        int t2_size = t2.lines.size();
+        int t1_line_length = t1.lines.get(0).length();
+        String s = "";
+        for (int i = 0; i < leading; i++) {
+            s += " ";
+        }
+        if (t1_size > t2_size) {
+            for (int i = 0; i < t2_size; i++) {
+                t.lines.add(t1.lines.get(i) + s + t2.lines.get(i));
+            }
+            for (int i = t2_size; i < t1_size; i++) {
+                t.lines.add(t1.lines.get(i));
+            }
+        }
+        else if (t1_size < t2_size) {
+            for (int i = 0; i < t1_size; i++) {
+                t.lines.add(t1.lines.get(i) + s + t2.lines.get(i));
+            }
+            for (int i = t1_size; i < t2_size; i++) {
+                String whitespaces = s;
+                for (int j = 0; j < t1_line_length; j++) whitespaces += " ";
+                t.lines.add(whitespaces + t2.lines.get(i));
+            }
+        }
+        else {
+            for (int i = 0; i < t1_size; i++) {
+                t.lines.add(t1.lines.get(i) + s + t2.lines.get(i));
+            }
+        }
+        return t;
+    }
+    
+    public void print() {
+        for(String s: lines) {
+            System.out.println(s);
+        }
     }
 }
