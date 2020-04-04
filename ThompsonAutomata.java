@@ -6,8 +6,11 @@
 package thompsonautomata;
 
 import java.util.ArrayList;
+import java.util.Hashtable;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Scanner;
+import javafx.util.Pair;
 
 /**
  *
@@ -16,21 +19,18 @@ import java.util.Scanner;
 public class ThompsonAutomata {
     
     public static void main(String[] args) {
-        //Scanner in = new Scanner(System.in);
-        //System.out.println("Ingrese la expresión regular: ");
-        //String input = in.nextLine();
-        //Node Tree = generateTree("((a|b)|(c|d))|a*");
-        Node Tree = generateTree("(a*|b)|(c|d)");
+        Scanner in = new Scanner(System.in);
+        System.out.println("Ingrese la expresión regular: ");
+        String input = in.nextLine();
+        Node Tree = generateTree(input);
         //System.out.println("Árbol listo");
-        
-        int tree_length = Node.getTreeLength(Tree);
-        Tree.setArcs();
-        Tree.setRest();
-        
-        TreeGraph t = getTreeGraph(Tree);
-        
-        for (String s : t.lines) {
-            System.out.println(s);
+        //int tree_length = Node.getTreeLength(Tree);
+        Node.setLevels(Tree, 0);
+        Node.setArcs(Tree);
+        //Tree.setRest();
+        ArrayList<String> s = getTreeGraph(Tree);
+        for (int i = 0; i < s.size(); i++) {
+            System.out.print(s.get(i));
         }
     }
     
@@ -153,65 +153,162 @@ public class ThompsonAutomata {
         return -1;
     }
     
-    public static ArrayList<String> printArc(int rest, int length, boolean left, boolean right) {
+    public static ArrayList<String> printArc(int rest_left, int rest_right, int length, boolean left, boolean right) {
         ArrayList<String> t = new ArrayList<>();
         for (int i = length; i > 0; i--) {
             String s = "";
-            for (int j = 0; j < rest; j++)  s += " ";
+            for (int j = 0; j < rest_left - length; j++)  s += " ";
             for (int j = 0; j < i - 1; j++) s += " ";
             s += left? "/ ": "  ";
             for (int j = i; j < length; j++) s += " ";
             for (int j = i; j < length; j++) s += " ";
             s += right? "\\": " ";
             for (int j = 0; j < i - 1; j++) s += " ";
-            for (int j = 0; j < rest; j++) s += " ";
+            for (int j = 0; j < rest_right - length; j++) s += " ";
             t.add(s);
         }
         return t;
     }
     
-    public static TreeGraph getTreeGraph(Node root) {
-        TreeGraph t = new TreeGraph();
-        TreeGraph children = new TreeGraph();
-        int rest = root.rest;
-        int arc = root.arc_length;
-        int leading = 0;
+    public static ArrayList<String> getTreeGraph(Node root) {
+        Hashtable<Pair<Integer,Integer>, String> map = new Hashtable<>();
         
-        int arcs_left = root.total_LeftArcSons(); 
-        int arcs_right = root.total_RightArcSons();
-        t.lines.add(
-                whiteSpaces(arcs_left) +
-                root.me +
-                whiteSpaces(arc+1)
-        );
-        TreeGraph t_left = new TreeGraph(), t_right = new TreeGraph();
-        if (root.left != null && root.right != null) {
-            leading = (arc != root.left.arc_length)? 3: 0;
-            t_left = getTreeGraph(root.left);
-            t_right = getTreeGraph(root.right);
-            children = TreeGraph.concat(t_left, t_right, leading);
-        }
-        else if (root.left != null) {
-            leading = (arc != root.left.arc_length)? 3: 0;
-            t_left = getTreeGraph(root.left);
-            t_right.lines.add(whiteSpaces(arc+1));
-            children = TreeGraph.concat(t_left, t_right, leading);
-        }
-        else if (root.right != null) {
-            if (arc != root.left.arc_length) {
-                leading = 3;
-                t_left.lines.add(whiteSpaces(rest)+whiteSpaces(arc-1));
-            } else {
-                leading = 0;
-                t_left.lines.add(whiteSpaces(rest)+whiteSpaces(arc));
+        int rest = root.getLongLeftPath();
+        int total_width = rest + 1 + root.getLongRightPath();
+        
+        putIntoMap(map, root, rest, 0);
+        
+        ArrayList<String> s = new ArrayList<>();
+        for (int i = 0; !map.isEmpty(); i++) {
+            s.add(i, "");
+            for (int j = 0; j < total_width; j++) {
+                Pair<Integer, Integer> p = new Pair<>(j,i);
+                if(map.containsKey(p)) {
+                    s.set(i, s.get(i) + map.get(p));
+                    map.remove(p);
+                } else {
+                    s.set(i, s.get(i) + " ");
+                }
             }
-            t_right = getTreeGraph(root.right);
-            children = TreeGraph.concat(t_left, t_right, leading);
+            s.set(i, s.get(i) + "\n");
         }
-        t.lines.addAll(printArc(rest, arc, root.left != null, root.right != null));
-        t.lines.addAll(children.lines);
-        return t;
+        return s;
     }
+    
+    private static void putIntoMap(Hashtable<Pair<Integer,Integer>, String> map, Node n, int x, int y) {
+        map.put(new Pair<>(x, y), n.me);
+        if(n.hasLeft()) {
+            int i;
+            for (i = 1; i <= n.arc_length; i++) {
+                map.put(new Pair<>(x-i, y+i), "/");
+            }
+            putIntoMap(map, n.left, x-i, y+i);
+        }
+        
+        if (n.hasRight()) {
+            int i;
+            for (i = 1; i <= n.arc_length; i++) {
+                map.put(new Pair<>(x+i, y+i), "\\");
+            }
+            putIntoMap(map, n.right, x+i, y+i);
+        }
+    }
+    
+//    public static TreeGraph getTreeGraph(Node root) {
+//        TreeGraph t = new TreeGraph();
+//        TreeGraph children = new TreeGraph();
+//        int arc = root.arc_length;
+//        
+//        int arcs_left = root.total_LeftArcSons(); 
+//        int arcs_right = root.total_RightArcSons();
+//        
+//        int left_width;
+//        int right_width;
+//        
+//        t.lines.add(
+//                whiteSpaces(arcs_left) +
+//                root.me +
+//                whiteSpaces(arcs_right)
+//        );
+//        
+//        t.lines.addAll(printArc(arcs_left, arcs_right, arc, root.hasLeft(), root.hasRight()));
+//        
+//        TreeGraph t_left = new TreeGraph(), t_right = new TreeGraph();
+//        if (root.left != null && root.right != null) {
+//            t_left = getTreeGraph(root.left);
+//            t_right = getTreeGraph(root.right);
+//            
+//            left_width = t_left.lines.get(0).length();
+//            right_width = t_right.lines.get(0).length();
+//            
+//            children = TreeGraph.concat(t_left, t_right, arcs_left + 1 + arcs_right - left_width - right_width);
+//        }
+//        else if (root.left != null) {
+//            leading = (arc != root.left.arc_length)? 3: 0;
+//            t_left = getTreeGraph(root.left);
+//            t_right.lines.add(whiteSpaces(arc + 1));
+//            children = TreeGraph.concat(t_left, t_right, leading);
+//        }
+//        else if (root.right != null) {
+//            if (arc != root.left.arc_length) {
+//                leading = 3;
+//                t_left.lines.add(whiteSpaces(rest)+whiteSpaces(arc-1));
+//            } else {
+//                leading = 0;
+//                t_left.lines.add(whiteSpaces(rest)+whiteSpaces(arc));
+//            }
+//            t_right = getTreeGraph(root.right);
+//            children = TreeGraph.concat(t_left, t_right, leading);
+//        }
+//        t.lines.addAll(children.lines);
+//        return t;
+//    }
+    
+    
+//    public static TreeGraph getTreeGraph(Node root) {
+//        TreeGraph t = new TreeGraph();
+//        TreeGraph children = new TreeGraph();
+//        int rest = root.rest;
+//        int arc = root.arc_length;
+//        int leading = 0;
+//        
+//        int arcs_left = root.total_LeftArcSons(); 
+//        int arcs_right = root.total_RightArcSons();
+//        
+//        t.lines.add(
+//                whiteSpaces(arcs_left) +
+//                root.me +
+//                whiteSpaces(arcs_right)
+//        );
+//        TreeGraph t_left = new TreeGraph(), t_right = new TreeGraph();
+//        if (root.left != null && root.right != null) {
+//            leading = (arc != root.left.arc_length)? 3: 0;
+//            t_left = getTreeGraph(root.left);
+//            if (root.left.right == null) ;
+//            t_right = getTreeGraph(root.right);
+//            children = TreeGraph.concat(t_left, t_right, leading);
+//        }
+//        else if (root.left != null) {
+//            leading = (arc != root.left.arc_length)? 3: 0;
+//            t_left = getTreeGraph(root.left);
+//            t_right.lines.add(whiteSpaces(arc + 1));
+//            children = TreeGraph.concat(t_left, t_right, leading);
+//        }
+//        else if (root.right != null) {
+//            if (arc != root.left.arc_length) {
+//                leading = 3;
+//                t_left.lines.add(whiteSpaces(rest)+whiteSpaces(arc-1));
+//            } else {
+//                leading = 0;
+//                t_left.lines.add(whiteSpaces(rest)+whiteSpaces(arc));
+//            }
+//            t_right = getTreeGraph(root.right);
+//            children = TreeGraph.concat(t_left, t_right, leading);
+//        }
+//        t.lines.addAll(printArc(arcs_left, arcs_right, arc, root.left != null, root.right != null));
+//        t.lines.addAll(children.lines);
+//        return t;
+//    }
     
     public static String whiteSpaces(int n) {
         String s = "";
@@ -220,11 +317,38 @@ public class ThompsonAutomata {
     }
 }
 
+class NodeTable {
+    ArrayList<Node>[] table;
+    
+    public NodeTable(Node n, int levels) {
+        table = new ArrayList[levels];
+        for (int i = 0; i < levels; i++) {
+            table[i] = new ArrayList<>();
+        }
+        initTable(n);
+    }
+    
+    void initTable(Node n) {
+        put(n.level, n);
+        if (n.hasLeft()) initTable(n.left);
+        if (n.hasRight()) initTable(n.right);
+    }
+    
+    ArrayList<Node> get (int pos) {
+        return table[pos];
+    }
+    
+    void put (int pos, Node n) {
+        if (pos >= 0 && pos < table.length) table[pos].add(n);
+    }
+}
+
 class Node {
     Node left, right;
     String me;
     int arc_length;
     int rest;
+    int level;
     
     Node(String me) {
         this.me = me;
@@ -232,47 +356,99 @@ class Node {
     Node(char c) {
         this.me = String.valueOf(c);
     }
+    
+    boolean hasLeft() {
+        return left != null;
+    }
+    
+    boolean hasRight() {
+        return right != null;
+    }
+    
     void setLeft(Node n) {
         this.left = n;
     }
     
     int setRest() {
-        rest = (left != null)? 1 + left.setRest() + left.arc_length: 0;
-        if (right != null) right.setRest();
+        rest = (hasLeft())? 1 + left.setRest() + left.arc_length: 0;
+        if (hasRight()) right.setRest();
         return rest;
     }
     
-    public void setArcs() {
-        int a, b;
-        if (left != null && right != null) {
-            left.setArcs();
-            a = left.arc_length;
-            right.setArcs();
-            b = right.arc_length;
-            
-            int new_arc = Math.max(a, b);
-            left.arc_length = new_arc;
-            right.arc_length = new_arc;
-            
-            if (left.right != null && right.left != null) {     //Colisionan?
-                int left_col = right.total_LeftArcSons();
-                int right_col = left.total_RightArcSons();
-                arc_length = Math.max(left_col, right_col) + 1;
-            } else {
-                arc_length = (new_arc != 0) ?  new_arc: 1;
+    public static void setLevels(Node n, int level) {
+        n.level = level;
+        if (n.hasLeft()) setLevels(n.left, level + 1);
+        if (n.hasRight()) setLevels(n.right, level + 1);
+    }
+    
+    public static void setArcs(Node root) {
+        int [] arcs = new int [getTreeLength(root) + 1];
+        arcs[arcs.length - 1] = 0;
+        arcs[arcs.length - 2] = 1;
+        NodeTable h = new NodeTable(root, arcs.length);
+        defineArcs(h, arcs, arcs.length - 3);
+        applyArcs(h, arcs);
+    }
+    
+    private static void defineArcs(NodeTable h, int [] arcs, int pos) {
+        if (pos < 0) return;
+        
+        for (int i = pos; i >= 0; i--) {
+            for (Node n: h.get(i)) {
+                if (arcs[i] < arcs[i+1]) {
+                    arcs[i] = arcs[i+1];
+                }
+                
+                if(hasCollisions(n,0,0,new Coordinates())) {
+                    int a, b;
+                    a = n.left.getLongRightPath();
+                    b = (n.hasRight())? n.right.getLongLeftPath(): 0;
+                    arcs[i] = Math.max(a, b) + 1;
+                }
             }
         }
-        else if (left != null) {
-            left.setArcs();
-            a = left.arc_length;
-            arc_length = (a != 0)? a: 1;
+    }
+    
+    private static void applyArcs(NodeTable h, int [] arcs) {
+        for (int i = 0; i < h.table.length; i++) {
+            for (Node n: h.get(i)) {
+                n.arc_length = arcs[i];
+            }
         }
-        else if (right != null) {
-            right.setArcs();
-            b = right.arc_length;
-            arc_length = (b != 0)? b: 1;
-        } 
-        else arc_length = 0;
+    }
+    
+    private static boolean hasCollisions(Node n, int x, int y, Coordinates p) {
+        if (!(n.hasLeft() || n.hasRight())) {
+            p.add(x, y);
+            return false;
+        }
+        
+        int new_x, new_y;
+        
+        if (n.hasLeft()) {
+            new_x = (x-1) - n.arc_length;
+            new_y = (y+1) + n.arc_length;
+            p.add(new_x, new_y);
+            if (hasCollisions(n.left, new_x, new_y, p)) {
+                return true;
+            }
+        }
+        
+        if (n.hasRight()) {
+            new_x = (x+1) - n.arc_length;
+            new_y = (y+1) + n.arc_length;
+            p.add(new_x, new_y);
+            if (hasCollisions(n.right, new_x, new_y, p)) {
+                return true;
+            }
+        }
+        
+        for (int i = 0; i < p.size(); i++) {
+            for (int j = i+1; j < p.size(); j++) {
+                if (p.get(i).equals(p.get(j))) return true;
+            }
+        }
+        return false;
     }
     
     public static int getTreeLength(Node n) {
@@ -293,8 +469,17 @@ class Node {
     }
     
     int total_RightArcSons() {
-        if(right != null) return 1 + arc_length + right.total_RightArcSons();
-        else return 0;
+        return hasRight()? 1 + arc_length + right.total_RightArcSons(): 0;
+    }
+    
+    int getLongRightPath() {
+        return Math.max(hasLeft()? left.getLongRightPath() - arc_length - 1: 0,
+                hasRight()? right.getLongRightPath() + arc_length + 1: 0);
+    }
+    
+    int getLongLeftPath() {
+        return Math.max(hasLeft()? left.getLongLeftPath() + arc_length + 1: 0,
+                hasRight()? right.getLongLeftPath() - arc_length - 1: 0);
     }
 }
 
@@ -340,5 +525,35 @@ class TreeGraph {
         for(String s: lines) {
             System.out.println(s);
         }
+    }
+    
+    public static TreeGraph addSpaces(TreeGraph t, boolean inLeft, int amount) {
+        if (t.lines.isEmpty()) return t;
+        for (int i = 0; i < t.lines.size(); i++) {
+            String s = "";
+            for (int j = 0; j < amount; j++) {
+                s += " ";
+            }
+            String left = (inLeft)? s : "";
+            String right = (!inLeft)? s : "";
+            t.lines.set(i, left + t.lines.get(i) + right);
+        }
+        return t;
+    }
+}
+
+class Coordinates {
+    ArrayList< Pair<Integer,Integer> > points = new ArrayList<>();
+    
+    void add (int x, int y) {
+        points.add(new Pair<>(x, y));
+    }
+    
+    Pair<Integer,Integer> get (int i) {
+        return points.get(i);
+    } 
+    
+    int size() {
+        return points.size();
     }
 }
