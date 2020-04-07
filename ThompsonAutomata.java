@@ -5,6 +5,8 @@
  */
 package thompsonautomata;
 
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Scanner;
@@ -14,18 +16,25 @@ import java.util.Scanner;
  * @author juans
  */
 public class ThompsonAutomata {
-    
+
     public static void main(String[] args) {
         Scanner in = new Scanner(System.in);
         System.out.println("Ingrese la expresión regular: ");
         String input = in.nextLine();
+        try {
+            Pattern.compile(input);
+        } catch (PatternSyntaxException e) {
+            System.out.println("La expresión regular " + input + " no es válida");
+            System.err.println(e.getDescription());
+            System.exit(1);
+        }
         Node Tree = generateTree(input);
         Tree = treePruning(Tree);
-        
+
         System.out.println("Árbol listo");
-        
+
     }
-    
+
     public static Node generateTree(String expr) {
         Node result = new Node(".");
         for (int i = 0; i < expr.length(); i++) {
@@ -67,34 +76,34 @@ public class ThompsonAutomata {
                     break;
             }
         }
-        
+
         return result;
     }
-    
+
     public static Node treePruning(Node root) {
         if (root.child.size() == 1) {
             Node child = root.child.get(0);
             String parent_text = root.text;
             String child_text = child.text;
-            
+
             if (parent_text.equals(child_text) || parent_text.equals(".")) {
                 root.text = child.text;
                 root.child = child.child;
             }
         }
-        
+
         if (root.child.isEmpty()) {
             return root;
         }
-        
+
         Node new_root = new Node(root.text);
         for (int i = 0; i < root.child.size(); i++) {
             new_root.addChild(treePruning(root.child.get(i)));
         }
-        
+
         return new_root;
     }
-    
+
     public static String parentheses(String str, int i) {
         int count = 1;
         int j = i+1;
@@ -119,15 +128,15 @@ class Node {
     Node(String text) {
         this.text = text;
     }
-    
+
     void addChild(String expr) {
         this.child.add(new Node(expr));
     }
-    
+
     void addChild(Node n) {
         this.child.add(n);
     }
-    
+
     Node getLastChild() {
         return this.child.getLast();
     }
